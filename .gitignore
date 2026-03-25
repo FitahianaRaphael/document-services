@@ -1,0 +1,11 @@
+.env
+/env
+/node_modules
+/dist
+/logs
+/tmp
+*.log
+*.env
+*.pid
+*.seed
+*.pid.lock

@@ -1,0 +1,135 @@
+{
+  "info": {
+    "name":   "Document Generation Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",  "value": "http://localhost:3000" },
+    { "key": "batchId",  "value": "" },
+    { "key": "documentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1 — Créer un batch de 5 documents",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "const json = pm.response.json();",
+            "pm.collectionVariables.set('batchId', json.batchId);",
+            "pm.test('Status 202', () => pm.response.to.have.status(202));",
+            "pm.test('batchId présent', () => pm.expect(json.batchId).to.be.a('string'));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "url":    "{{baseUrl}}/api/documents/batch",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"userIds\": [\"user-001\", \"user-002\", \"user-003\", \"user-004\", \"user-005\"]}"
+        }
+      }
+    },
+    {
+      "name": "2 — Statut du batch",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "const json = pm.response.json();",
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Champ status présent', () => pm.expect(json.status).to.be.a('string'));",
+            "if (json.documents && json.documents.length > 0) {",
+            "  pm.collectionVariables.set('documentId', json.documents[0].documentId);",
+            "}"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "url":    "{{baseUrl}}/api/documents/batch/{{batchId}}"
+      }
+    },
+    {
+      "name": "3 — Télécharger un PDF",
+      "request": {
+        "method": "GET",
+        "url":    "{{baseUrl}}/api/documents/{{documentId}}"
+      }
+    },
+    {
+      "name": "4 — Health check",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('MongoDB up', () => pm.expect(pm.response.json().mongodb).to.eql('up'));",
+            "pm.test('Redis up',   () => pm.expect(pm.response.json().redis).to.eql('up'));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "url":    "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "5 — Métriques Prometheus",
+      "request": {
+        "method": "GET",
+        "url":    "{{baseUrl}}/metrics"
+      }
+    },
+    {
+      "name": "6 — Validation : userIds vide (doit retourner 400)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Erreur validation', () => pm.expect(pm.response.json().error).to.eql('Validation failed'));"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "url":    "{{baseUrl}}/api/documents/batch",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body":   { "mode": "raw", "raw": "{\"userIds\": []}" }
+      }
+    },
+    {
+      "name": "7 — Batch inexistant (doit retourner 404)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": ["pm.test('Status 404', () => pm.response.to.have.status(404));"]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "url":    "{{baseUrl}}/api/documents/batch/00000000-0000-0000-0000-000000000000"
+      }
+    },
+    {
+      "name": "8 — Batch de 1000 documents (benchmark)",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "exec": [
+            "const ids = Array.from({length:1000}, (_,i) => `user-${String(i).padStart(6,'0')}`);",
+            "pm.request.body.raw = JSON.stringify({userIds: ids});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "url":    "{{baseUrl}}/api/documents/batch",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body":   { "mode": "raw", "raw": "{}" }
+      }
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: Document Generation Service
+  description: Service de génération de documents CERFA/conventions en batch
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Local
+
+paths:
+  /api/documents/batch:
+    post:
+      summary: Créer un batch de génération de documents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userIds]
+              properties:
+                userIds:
+                  type: array
+                  items: { type: string }
+                  minItems: 1
+                  maxItems: 1000
+                  example: ["user-001", "user-002"]
+      responses:
+        "202":
+          description: Batch accepté
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId: { type: string, format: uuid }
+                  message: { type: string }
+        "400":
+          description: Validation error
+
+  /api/documents/batch/{batchId}:
+    get:
+      summary: Statut d'un batch
+      parameters:
+        - in: path
+          name: batchId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Détails du batch
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId:        { type: string }
+                  status:         { type: string, enum: [pending, processing, completed, failed] }
+                  totalCount:     { type: integer }
+                  processedCount: { type: integer }
+                  failedCount:    { type: integer }
+                  documents:      { type: array }
+        "404":
+          description: Batch introuvable
+
+  /api/documents/{documentId}:
+    get:
+      summary: Télécharger un PDF généré
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Fichier PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "202":
+          description: Document pas encore prêt
+        "404":
+          description: Document introuvable
+
+  /health:
+    get:
+      summary: Health check (DB, Redis, Queue)
+      responses:
+        "200": { description: Tout est up }
+        "503": { description: Un service est down }
+
+  /metrics:
+    get:
+      summary: Métriques Prometheus
+      responses:
+        "200":
+          description: Format texte Prometheus
+          content:
+            text/plain: {}
