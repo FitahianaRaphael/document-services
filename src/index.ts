@@ -106,10 +106,15 @@ async function uploadToGridFs(
 // ─── Démarrage Worker inline ──────────────────────────────────────────────────
 function startWorker(): void {
   // Upstash Redis nécessite TLS — on utilise l'URL complète
-  const redisUrl = process.env.REDIS_URL
-    ?? `redis://:${process.env.REDIS_PASSWORD ?? ''}@${config.redis.host}:${config.redis.port}`;
-
-  const queue = new Bull<JobData>('document-generation', redisUrl, {
+  const queue = new Bull<JobData>('document-generation', {
+    createClient: () => {
+      const Redis = require('ioredis') as typeof import('ioredis');
+      return new Redis(process.env.REDIS_URL ?? `redis://${config.redis.host}:${config.redis.port}`, {
+        tls: process.env.REDIS_URL?.startsWith('rediss') ? {} : undefined,
+        maxRetriesPerRequest: null,
+        enableReadyCheck:     false,
+      });
+    },
     defaultJobOptions: {
       attempts: 3,
       backoff:  { type: 'exponential', delay: 1000 },

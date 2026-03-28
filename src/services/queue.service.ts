@@ -1,22 +1,40 @@
-import Bull from 'bull';
-import { config } from '../config';
+import Bull  from 'bull';
+import Redis from 'ioredis';
+import { config }    from '../config';
 import { queueSize } from '../utils/metrics';
-import { logger } from '../utils/logger';
+import { logger }    from '../utils/logger';
 
 let _queue: Bull.Queue | null = null;
-
 const inMemoryQueue: Array<Bull.Job['data']> = [];
 let redisAvailable = true;
+
+function createRedisClient(): Redis {
+  const url = process.env.REDIS_URL;
+  if (url) {
+    return new Redis(url, {
+      tls:                  url.startsWith('rediss') ? {} : undefined,
+      maxRetriesPerRequest: null,
+      enableReadyCheck:     false,
+    });
+  }
+  return new Redis({
+    host:                 config.redis.host,
+    port:                 config.redis.port,
+    password:             process.env.REDIS_PASSWORD,
+    maxRetriesPerRequest: null,
+    enableReadyCheck:     false,
+  });
+}
 
 export function getQueue(): Bull.Queue {
   if (!_queue) {
     _queue = new Bull('document-generation', {
-      redis: { host: config.redis.host, port: config.redis.port },
+      createClient: () => createRedisClient(),
       defaultJobOptions: {
-        attempts: config.queue.retries,
-        backoff: { type: 'exponential', delay: config.queue.backoffDelay },
+        attempts:  config.queue.retries,
+        backoff:   { type: 'exponential', delay: config.queue.backoffDelay },
         removeOnComplete: 100,
-        removeOnFail: 200,
+        removeOnFail:     200,
       },
     });
 
@@ -25,9 +43,8 @@ export function getQueue(): Bull.Queue {
       redisAvailable = false;
     });
 
-    _queue.on('waiting', async () => {
-      const cnt = await _queue!.getWaitingCount();
-      queueSize.set(cnt);
+    _queue.on('waiting', () => {
+      void _queue!.getWaitingCount().then(cnt => queueSize.set(cnt));
     });
   }
   return _queue;
@@ -35,13 +52,12 @@ export function getQueue(): Bull.Queue {
 
 export async function enqueueDocument(data: {
   documentId: string;
-  userId: string;
-  batchId: string;
+  userId:     string;
+  batchId:    string;
 }): Promise<void> {
   if (!redisAvailable) {
-    // Fallback : traitement en mémoire (limité, pour la résilience)
     inMemoryQueue.push(data);
-    logger.warn({ msg: 'Job pushed to in-memory fallback queue', ...data });
+    logger.warn({ msg: 'Job pushed to in-memory fallback', ...data });
     return;
   }
   await getQueue().add(data);
