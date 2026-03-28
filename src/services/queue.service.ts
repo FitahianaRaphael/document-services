@@ -1,5 +1,5 @@
 import Bull  from 'bull';
-import Redis from 'ioredis';
+import IORedis from 'ioredis';
 import { config }    from '../config';
 import { queueSize } from '../utils/metrics';
 import { logger }    from '../utils/logger';
@@ -8,16 +8,16 @@ let _queue: Bull.Queue | null = null;
 const inMemoryQueue: Array<Bull.Job['data']> = [];
 let redisAvailable = true;
 
-function createRedisClient(): Redis {
+function makeRedisClient(): IORedis {
   const url = process.env.REDIS_URL;
   if (url) {
-    return new Redis(url, {
+    return new IORedis(url, {
       tls:                  url.startsWith('rediss') ? {} : undefined,
       maxRetriesPerRequest: null,
       enableReadyCheck:     false,
     });
   }
-  return new Redis({
+  return new IORedis({
     host:                 config.redis.host,
     port:                 config.redis.port,
     password:             process.env.REDIS_PASSWORD,
@@ -29,7 +29,13 @@ function createRedisClient(): Redis {
 export function getQueue(): Bull.Queue {
   if (!_queue) {
     _queue = new Bull('document-generation', {
-      createClient: () => createRedisClient(),
+      createClient: (type) => {
+        switch (type) {
+          case 'subscriber': return makeRedisClient();
+          case 'client':     return makeRedisClient();
+          default:           return makeRedisClient();
+        }
+      },
       defaultJobOptions: {
         attempts:  config.queue.retries,
         backoff:   { type: 'exponential', delay: config.queue.backoffDelay },

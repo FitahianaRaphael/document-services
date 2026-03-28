@@ -16,6 +16,7 @@ import { DocumentModel } from './models/document.model';
 import { Batch }         from './models/batch.model';
 import { gridFsBucket }  from './services/pdf.service';
 import { documentsGeneratedTotal, pdfGenerationDuration } from './utils/metrics';
+import { getQueue } from './services/queue.service';
 
 interface JobData {
   documentId: string;
@@ -128,19 +129,7 @@ function makeRedisClient(): IORedis {
 
 // ─── Démarrage Worker ─────────────────────────────────────────────────────────
 function startWorker(): void {
-  const queue = new Bull<JobData>('document-generation', {
-    createClient: (type) => {
-      switch (type) {
-        case 'subscriber': return makeRedisClient();
-        case 'client':     return makeRedisClient();
-        default:           return makeRedisClient();
-      }
-    },
-    defaultJobOptions: {
-      attempts: 3,
-      backoff:  { type: 'exponential', delay: 1000 },
-    },
-  });
+  const queue = getQueue();
 
   queue.process(config.queue.concurrency, async (job) => {
     const { documentId, userId, batchId } = job.data;
