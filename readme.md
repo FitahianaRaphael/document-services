@@ -36,6 +36,30 @@ document-service/
 └── tsconfig.json
 
 
+Dans Swagger, voici exactement où attendre :
+
+ POST /batch → Execute
+json{"userIds": ["user-001"]}
+→ reçois batchId
+
+ ATTENDS ICI — 15 secondes sans rien faire
+
+ GET /batch/{batchId} → colle le batchId → Execute
+Regarde le champ status :
+
+"processing" → attends encore 5 secondes et reteste
+"completed"  → passe à l'étape suivante
+
+③ Copie le documentId dans la réponse :
+json"documents": [
+  {
+    "documentId": "XXXX-XXXX"
+  }
+]
+
+ GET /documents/{documentId} → colle le documentId → Execute
+→ Clique "Download" dans Swagger 
+
 
 #Document Generation Service
 
