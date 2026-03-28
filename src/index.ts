@@ -12,13 +12,14 @@ import { gridFsBucket }  from './services/pdf.service';
 import { documentsGeneratedTotal, pdfGenerationDuration } from './utils/metrics';
 import { childLogger } from './utils/logger';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface JobData {
   documentId: string;
   userId:     string;
   batchId:    string;
 }
 
-
+// ─── Génération PDF ───────────────────────────────────────────────────────────
 function generatePdf(userId: string, documentId: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc    = new PDFDocument({ margin: 50 });
@@ -82,6 +83,7 @@ function generatePdf(userId: string, documentId: string): Promise<Buffer> {
   });
 }
 
+// ─── Upload GridFS ────────────────────────────────────────────────────────────
 async function uploadToGridFs(
   buffer: Buffer,
   documentId: string,
@@ -101,13 +103,13 @@ async function uploadToGridFs(
   });
 }
 
+// ─── Démarrage Worker inline ──────────────────────────────────────────────────
 function startWorker(): void {
-  const queue = new Bull<JobData>('document-generation', {
-    redis: {
-      host:     config.redis.host,
-      port:     config.redis.port,
-      password: process.env.REDIS_PASSWORD,
-    },
+  // Upstash Redis nécessite TLS — on utilise l'URL complète
+  const redisUrl = process.env.REDIS_URL
+    ?? `redis://:${process.env.REDIS_PASSWORD ?? ''}@${config.redis.host}:${config.redis.port}`;
+
+  const queue = new Bull<JobData>('document-generation', redisUrl, {
     defaultJobOptions: {
       attempts: 3,
       backoff:  { type: 'exponential', delay: 1000 },
@@ -166,6 +168,7 @@ function startWorker(): void {
   logger.info({ msg: `Worker started (concurrency: ${config.queue.concurrency})` });
 }
 
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap(): Promise<void> {
   try {
     await mongoose.connect(config.mongodb.uri);
@@ -176,7 +179,7 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-
+  // Démarre le worker dans le même process
   startWorker();
 
   const app    = createApp();
