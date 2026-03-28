@@ -5,6 +5,8 @@ info:
   version: 1.0.0
 
 servers:
+  - url: https://TON-SERVICE.onrender.com
+    description: Production (Render)
   - url: http://localhost:3000
     description: Local
 
