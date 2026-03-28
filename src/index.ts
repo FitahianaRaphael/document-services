@@ -1,18 +1,22 @@
-import mongoose  from 'mongoose';
-import http      from 'http';
-import Bull      from 'bull';
-import PDFDocument   from 'pdfkit';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import mongoose     from 'mongoose';
+import http         from 'http';
+import Bull         from 'bull';
+import IORedis      from 'ioredis';
+import PDFDocument  from 'pdfkit';
 import { PassThrough } from 'stream';
-import { createApp } from './app';
-import { config }    from './config';
-import { logger }    from './utils/logger';
+
+import { createApp }     from './app';
+import { config }        from './config';
+import { logger }        from './utils/logger';
+import { childLogger }   from './utils/logger';
 import { DocumentModel } from './models/document.model';
 import { Batch }         from './models/batch.model';
 import { gridFsBucket }  from './services/pdf.service';
 import { documentsGeneratedTotal, pdfGenerationDuration } from './utils/metrics';
-import { childLogger } from './utils/logger';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface JobData {
   documentId: string;
   userId:     string;
@@ -22,9 +26,9 @@ interface JobData {
 // ─── Génération PDF ───────────────────────────────────────────────────────────
 function generatePdf(userId: string, documentId: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc    = new PDFDocument({ margin: 50 });
+    const doc  = new PDFDocument({ margin: 50 });
     const chunks: Buffer[] = [];
-    const pass   = new PassThrough();
+    const pass = new PassThrough();
 
     pass.on('data',  (c: Buffer) => chunks.push(c));
     pass.on('end',   () => resolve(Buffer.concat(chunks)));
@@ -103,17 +107,34 @@ async function uploadToGridFs(
   });
 }
 
-// ─── Démarrage Worker inline ──────────────────────────────────────────────────
+// ─── Création client Redis ────────────────────────────────────────────────────
+function makeRedisClient(): IORedis {
+  const url = process.env.REDIS_URL;
+  if (url) {
+    return new IORedis(url, {
+      tls:                  url.startsWith('rediss') ? {} : undefined,
+      maxRetriesPerRequest: null,
+      enableReadyCheck:     false,
+    });
+  }
+  return new IORedis({
+    host:                 config.redis.host,
+    port:                 config.redis.port,
+    password:             process.env.REDIS_PASSWORD,
+    maxRetriesPerRequest: null,
+    enableReadyCheck:     false,
+  });
+}
+
+// ─── Démarrage Worker ─────────────────────────────────────────────────────────
 function startWorker(): void {
-  // Upstash Redis nécessite TLS — on utilise l'URL complète
   const queue = new Bull<JobData>('document-generation', {
-    createClient: () => {
-      const { default: Redis } = await import('ioredis');
-      return new Redis(process.env.REDIS_URL ?? `redis://${config.redis.host}:${config.redis.port}`, {
-        tls: process.env.REDIS_URL?.startsWith('rediss') ? {} : undefined,
-        maxRetriesPerRequest: null,
-        enableReadyCheck:     false,
-      });
+    createClient: (type) => {
+      switch (type) {
+        case 'subscriber': return makeRedisClient();
+        case 'client':     return makeRedisClient();
+        default:           return makeRedisClient();
+      }
     },
     defaultJobOptions: {
       attempts: 3,
@@ -184,7 +205,6 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // Démarre le worker dans le même process
   startWorker();
 
   const app    = createApp();
