@@ -9,7 +9,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      MONGO_URI: mongodb://mongo:27017/documents
+      MONGO_URI: MONGO_URI=mongodb+srv://fanatenanasafidy:python.html@safidy.xolgxle.mongodb.net/document
       REDIS_HOST: redis
       REDIS_PORT: 6379
       QUEUE_CONCURRENCY: 20
