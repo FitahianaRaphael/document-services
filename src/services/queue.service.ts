@@ -28,6 +28,9 @@ function makeRedisClient(): IORedis {
 
 export function getQueue(): Bull.Queue {
   if (!_queue) {
+    // Debug — log pour voir ce que Redis reçoit
+    logger.info({ msg: `Redis config — URL: ${process.env.REDIS_URL ? 'SET' : 'NOT SET'} HOST: ${config.redis.host}` });
+
     _queue = new Bull('document-generation', {
       createClient: (type) => {
         switch (type) {
