@@ -108,7 +108,7 @@ function startWorker(): void {
   // Upstash Redis nécessite TLS — on utilise l'URL complète
   const queue = new Bull<JobData>('document-generation', {
     createClient: () => {
-      const Redis = require('ioredis') as typeof import('ioredis');
+      const { default: Redis } = await import('ioredis');
       return new Redis(process.env.REDIS_URL ?? `redis://${config.redis.host}:${config.redis.port}`, {
         tls: process.env.REDIS_URL?.startsWith('rediss') ? {} : undefined,
         maxRetriesPerRequest: null,
